@@ -101,4 +101,4 @@ jobs:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           projectId: ${{ env.GCP_PROJECT_ID }}
           entryPoint: ./apps/frontend
-```eof
+
