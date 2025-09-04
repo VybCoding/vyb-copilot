@@ -1,4 +1,4 @@
-name: Deploy to GCP and Firebase
+name: Deploy to GCP
 
 on:
   push:
@@ -6,13 +6,16 @@ on:
       - main
 
 env:
-  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  GCP_REGION: 'us-central1'
+  GCP_PROJECT_ID: vyb-copilot
+  GCP_REGION: us-central1
+  GAR_LOCATION: us-central1 
 
 jobs:
   deploy-backend:
     name: Build and Deploy Backend Services
     runs-on: ubuntu-latest
+    
+    # This block gives the job permission to request an OIDC token for authentication
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -22,31 +25,32 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Authenticate to Google Cloud
+        id: auth
         uses: 'google-github-actions/auth@v1'
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_SA_EMAIL }}
+          workload_identity_provider: '${{ secrets.GCP_WIF_PROVIDER }}'
+          service_account: '${{ secrets.GCP_SA_EMAIL }}'
 
       - name: Set up Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v1'
         
       - name: Configure Docker
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+        run: gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
 
       - name: Build and Push api-gateway
         run: |-
-          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot/api-gateway:latest ./apps/backend/api-gateway
-          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot/api-gateway:latest
+          docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot-images/api-gateway:latest ./apps/backend/api-gateway
+          docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot-images/api-gateway:latest
 
       - name: Build and Push orchestrator
         run: |-
-          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot/orchestrator:latest ./apps/backend/orchestrator
-          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot/orchestrator:latest
+          docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot-images/orchestrator:latest ./apps/backend/orchestrator
+          docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot-images/orchestrator:latest
 
       - name: Deploy api-gateway to Cloud Run
         run: |-
           gcloud run deploy api-gateway \
-            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot/api-gateway:latest \
+            --image=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot-images/api-gateway:latest \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
             --allow-unauthenticated
@@ -54,7 +58,7 @@ jobs:
       - name: Deploy orchestrator to Cloud Run
         run: |-
           gcloud run deploy orchestrator \
-            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot/orchestrator:latest \
+            --image=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/vyb-copilot-images/orchestrator:latest \
             --region=${{ env.GCP_REGION }} \
             --platform=managed \
             --allow-unauthenticated
@@ -63,27 +67,38 @@ jobs:
     name: Deploy Frontend to Firebase Hosting
     runs-on: ubuntu-latest
     needs: deploy-backend
+    
+    # Add the same permissions block to this job as well
+    permissions:
+      contents: 'read'
+      id-token: 'write'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: 'google-github-actions/auth@v1'
+        with:
+          workload_identity_provider: '${{ secrets.GCP_WIF_PROVIDER }}'
+          service_account: '${{ secrets.GCP_SA_EMAIL }}'
+          
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-
+      
       - name: Install Dependencies and Build
+        working-directory: ./apps/frontend
         run: |
-          cd apps/frontend
           npm install
           npm run build
-
+          
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SA_KEY }}'
-          channelId: live
           projectId: ${{ env.GCP_PROJECT_ID }}
           entryPoint: ./apps/frontend
+```eof
