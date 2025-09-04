@@ -1,0 +1,17 @@
+
+{
+  "name": "vyb-copilot",
+  "private": true,
+  "description": "A Node.js monorepo.",
+  "workspaces": [
+    "apps/*",
+    "apps/backend/*"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:api-gateway": "npm run dev --workspace=api-gateway",
+    "dev:orchestrator": "npm run dev --workspace=orchestrator"
+  },
+  "author": "",
+  "license": "ISC"
+}
